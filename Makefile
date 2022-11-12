@@ -1,54 +1,37 @@
-.PHONY: macos libusb ios payload clean
+AS      ?= as
+CC      ?= cc
+OBJCOPY ?= gobjcopy
+SDKROOT ?= $(shell xcrun -sdk macosx -show-sdk-path)
 
-CC ?= clang
+ifeq ($(LIBUSB),1)
+CFLAGS  ?= -Wall -Wextra -Wpedantic -DHAVE_LIBUSB
+LDFLAGS ?= -lusb-1.0 -lcrypto
+else
+CFLAGS  ?= -Weverything -framework CoreFoundation -framework IOKit
+endif
 
-macos:
-	xxd -iC payload_A9.bin payload_A9.h
-	xxd -iC payload_notA9.bin payload_notA9.h
-	xxd -iC payload_notA9_armv7.bin payload_notA9_armv7.h
-	xxd -iC payload_handle_checkm8_request.bin payload_handle_checkm8_request.h
-	xxd -iC payload_handle_checkm8_request_armv7.bin payload_handle_checkm8_request_armv7.h
-	xcrun -sdk macosx clang -mmacosx-version-min=10.9 -Weverything gaster.c lzfse.c -o gaster -framework CoreFoundation -framework IOKit -Os
-	$(RM) payload_A9.h payload_notA9.h payload_notA9_armv7.h payload_handle_checkm8_request.h payload_handle_checkm8_request_armv7.h
+ifeq ($(shell sw_vers -productName),macOS)
+EXTRAFLAGS := -mmacosx-version-min=10.9
+endif
 
-libusb:
-	xxd -iC payload_A9.bin payload_A9.h
-	xxd -iC payload_notA9.bin payload_notA9.h
-	xxd -iC payload_notA9_armv7.bin payload_notA9_armv7.h
-	xxd -iC payload_handle_checkm8_request.bin payload_handle_checkm8_request.h
-	xxd -iC payload_handle_checkm8_request_armv7.bin payload_handle_checkm8_request_armv7.h
-	$(CC) -Wall -Wextra -Wpedantic -DHAVE_LIBUSB gaster.c lzfse.c -o gaster -lusb-1.0 -lcrypto -Os
-	$(RM) payload_A9.h payload_notA9.h payload_notA9_armv7.h payload_handle_checkm8_request.h payload_handle_checkm8_request_armv7.h
+ifeq ($(shell sw_vers -productName),iPhone OS)
+EXTRAFLAGS := -arch armv7 -arch arm64 -mios-version-min=9.0 -isystem $(SDKROOT)
+endif
 
-ios:
-	mkdir headers
-	ln -s $(shell xcrun -sdk macosx -show-sdk-path)/usr/include/libkern headers
-	ln -s $(shell xcrun -sdk macosx -show-sdk-path)/System/Library/Frameworks/IOKit.framework/Headers headers/IOKit
-	xxd -iC payload_A9.bin payload_A9.h
-	xxd -iC payload_notA9.bin payload_notA9.h
-	xxd -iC payload_notA9_armv7.bin payload_notA9_armv7.h
-	xxd -iC payload_handle_checkm8_request.bin payload_handle_checkm8_request.h
-	xxd -iC payload_handle_checkm8_request_armv7.bin payload_handle_checkm8_request_armv7.h
-	xcrun -sdk iphoneos clang -arch armv7 -arch arm64 -isystemheaders -mios-version-min=9.0 -Weverything gaster.c lzfse.c -o gaster -framework CoreFoundation -framework IOKit -Os
-	$(RM) payload_A9.h payload_notA9.h payload_notA9_armv7.h payload_handle_checkm8_request.h payload_handle_checkm8_request_armv7.h
-	$(RM) -r headers
+all: gaster
 
-payload:
-	as -arch arm64 payload_A9.S -o payload_A9.o
-	gobjcopy -O binary -j .text payload_A9.o payload_A9.bin
-	$(RM) payload_A9.o
-	as -arch arm64 payload_notA9.S -o payload_notA9.o
-	gobjcopy -O binary -j .text payload_notA9.o payload_notA9.bin
-	$(RM) payload_notA9.o
-	as -arch armv7 payload_notA9_armv7.S -o payload_notA9_armv7.o
-	gobjcopy -O binary -j .text payload_notA9_armv7.o payload_notA9_armv7.bin
-	$(RM) payload_notA9_armv7.o
-	as -arch arm64 payload_handle_checkm8_request.S -o payload_handle_checkm8_request.o
-	gobjcopy -O binary -j .text payload_handle_checkm8_request.o payload_handle_checkm8_request.bin
-	$(RM) payload_handle_checkm8_request.o
-	as -arch armv7 payload_handle_checkm8_request_armv7.S -o payload_handle_checkm8_request_armv7.o
-	gobjcopy -O binary -j .text payload_handle_checkm8_request_armv7.o payload_handle_checkm8_request_armv7.bin
-	$(RM) payload_handle_checkm8_request_armv7.o
+gaster: gaster.c lzfse.c
+	$(CC) $(CFLAGS) -Os $(LDFLAGS) $^ -o $@ $(EXTRAFLAGS)
+
+payload_$(PAYLOAD).o: payload_$(PAYLOAD).S
+	$(AS) -arch arm64 $< -o $@
+
+payload_$(PAYLOAD).bin: payload_$(PAYLOAD).o
+	$(OBJCOPY) -O binary -j .text $< $@
+
+.PHONY: clean
 
 clean:
-	$(RM) gaster
+	rm -rf gaster *.o
+
+payload: payload_$(PAYLOAD).bin

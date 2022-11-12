@@ -1,5 +1,6 @@
 AS      ?= as
 CC      ?= cc
+XXD     ?= xxd
 OBJCOPY ?= gobjcopy
 SDKROOT ?= $(shell xcrun -sdk macosx -show-sdk-path)
 
@@ -18,7 +19,7 @@ ifeq ($(shell sw_vers -productName),iPhone OS)
 EXTRAFLAGS := -arch armv7 -arch arm64 -mios-version-min=9.0 -isystem $(SDKROOT)
 endif
 
-all: gaster
+all: payload gaster
 
 gaster: gaster.c lzfse.c
 	$(CC) $(CFLAGS) -Os $(LDFLAGS) $^ -o $@ $(EXTRAFLAGS)
@@ -29,9 +30,12 @@ payload_$(PAYLOAD).o: payload_$(PAYLOAD).S
 payload_$(PAYLOAD).bin: payload_$(PAYLOAD).o
 	$(OBJCOPY) -O binary -j .text $< $@
 
+payload_$(PAYLOAD).h: payload_$(PAYLOAD).bin
+	$(XXD) -iC $< $@
+
 .PHONY: clean
 
 clean:
 	rm -rf gaster *.o
 
-payload: payload_$(PAYLOAD).bin
+payload: payload_$(PAYLOAD).h

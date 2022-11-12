@@ -11,6 +11,12 @@ else
 CFLAGS  ?= -Weverything -framework CoreFoundation -framework IOKit
 endif
 
+ifneq (,$(findstring armv7,$(PAYLOAD)))
+PAYLOAD_ARCH := armv7
+else
+PAYLOAD_ARCH := arm64
+endif
+
 ifeq ($(shell sw_vers -productName),macOS)
 EXTRAFLAGS := -mmacosx-version-min=10.9
 endif
@@ -22,10 +28,10 @@ endif
 all: payload gaster
 
 gaster: gaster.c lzfse.c
-	$(CC) $(CFLAGS) -Os $(LDFLAGS) $^ -o $@ $(EXTRAFLAGS)
+	$(CC) $(CFLAGS) -Os $^ -o $@ $(EXTRAFLAGS) $(LDFLAGS)
 
 payload_$(PAYLOAD).o: payload_$(PAYLOAD).S
-	$(AS) -arch arm64 $< -o $@
+	$(AS) -arch $(PAYLOAD_ARCH) $< -o $@
 
 payload_$(PAYLOAD).bin: payload_$(PAYLOAD).o
 	$(OBJCOPY) -O binary -j .text $< $@
@@ -33,9 +39,9 @@ payload_$(PAYLOAD).bin: payload_$(PAYLOAD).o
 payload_$(PAYLOAD).h: payload_$(PAYLOAD).bin
 	$(XXD) -iC $< $@
 
-.PHONY: clean
+.PHONY: clean payload
 
 clean:
-	rm -rf gaster *.o
+	rm -rf gaster *.o *.h
 
 payload: payload_$(PAYLOAD).h

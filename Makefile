@@ -11,12 +11,6 @@ else
 CFLAGS  ?= -Weverything -framework CoreFoundation -framework IOKit
 endif
 
-ifneq (,$(findstring armv7,$(PAYLOAD)))
-PAYLOAD_ARCH := armv7
-else
-PAYLOAD_ARCH := arm64
-endif
-
 ifeq ($(shell sw_vers -productName),macOS)
 EXTRAFLAGS := -mmacosx-version-min=10.9
 endif
@@ -25,23 +19,29 @@ ifeq ($(shell sw_vers -productName),iPhone OS)
 EXTRAFLAGS := -arch armv7 -arch arm64 -mios-version-min=9.0 -isystem $(SDKROOT)
 endif
 
-all: payload gaster
+PAYLOADS := $(wildcard *.S)
+OBJECTS  := $(PAYLOADS:%.S=%.o)
+BINS     := $(PAYLOADS:%.S=%.bin)
+HEADERS  := $(PAYLOADS:%.S=%.h)
+
+all: $(OBJECTS) $(BINS) $(HEADERS) gaster
 
 gaster: gaster.c lzfse.c
 	$(CC) $(CFLAGS) -Os $^ -o $@ $(EXTRAFLAGS) $(LDFLAGS)
 
-payload_$(PAYLOAD).o: payload_$(PAYLOAD).S
-	$(AS) -arch $(PAYLOAD_ARCH) $< -o $@
+%_armv7.o: %_armv7.S
+	$(AS) -arch armv7 $< -o $@
 
-payload_$(PAYLOAD).bin: payload_$(PAYLOAD).o
+%.o: %.S
+	$(AS) -arch arm64 $< -o $@
+
+%.bin: %.o
 	$(OBJCOPY) -O binary -j .text $< $@
 
-payload_$(PAYLOAD).h: payload_$(PAYLOAD).bin
+%.h: %.bin
 	$(XXD) -iC $< $@
 
-.PHONY: clean payload
+.PHONY: clean
 
 clean:
 	rm -rf gaster *.o *.h
-
-payload: payload_$(PAYLOAD).h
